@@ -1,5 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { Check, Copy, CreditCard, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { authorizedFetch } from "../services/apiClient";
 import { formatIDR } from "../data/initialState";
 
@@ -50,7 +58,9 @@ interface UpgradeProModalProps {
 
 function loadSnapScript(snapJsUrl: string, clientKey: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const existing = document.getElementById("midtrans-snap-script") as HTMLScriptElement | null;
+    const existing = document.getElementById(
+      "midtrans-snap-script"
+    ) as HTMLScriptElement | null;
     if (existing) {
       const sameUrl = existing.getAttribute("src") === snapJsUrl;
       const sameKey = existing.getAttribute("data-client-key") === clientKey;
@@ -95,6 +105,8 @@ function loadSnapScript(snapJsUrl: string, clientKey: string): Promise<void> {
   });
 }
 
+const MAX_AUTO_POLL_ATTEMPTS = 60; // 5 minutes at 5s interval
+
 export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
   open,
   onClose,
@@ -106,6 +118,7 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [paying, setPaying] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [autoPolling, setAutoPolling] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(
     pendingOrderId
   );
@@ -114,67 +127,160 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
+  const pollCountRef = useRef(0);
+  const verifyInFlightRef = useRef(false);
+
   useEffect(() => {
     setActiveOrderId(pendingOrderId);
   }, [pendingOrderId]);
 
+  const verifyOrder = useCallback(
+    async (orderId: string, options?: { silent?: boolean }) => {
+      if (verifyInFlightRef.current) return;
+      verifyInFlightRef.current = true;
+      if (!options?.silent) {
+        setVerifying(true);
+        setError(null);
+      }
+
+      try {
+        const res = await authorizedFetch("/api/payments/midtrans/verify", {
+          method: "POST",
+          body: JSON.stringify({ orderId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(
+            data.error || "Gagal memverifikasi transaksi Midtrans."
+          );
+        }
+
+        if (data.verified) {
+          setAutoPolling(false);
+          setRedirectUrl(null);
+          await onSaveReceipt(orderId, "settlement");
+          onVerifiedPro(orderId, data.aiCreditsLimit || 50);
+          setError(null);
+          setStatusMessage(
+            "Pembayaran terverifikasi otomatis. Paket Pro (50 Kuota AI) kini aktif."
+          );
+          return;
+        }
+
+        if (data.rejected) {
+          setAutoPolling(false);
+          setActiveOrderId(null);
+          setRedirectUrl(null);
+          setStatusMessage(null);
+          setError(
+            data.rejectReason ||
+              `Transaksi ${orderId} ditolak otomatis (${data.transactionStatus}). Silakan buat pembayaran baru.`
+          );
+          return;
+        }
+
+        if (data.notStarted) {
+          if (options?.silent) {
+            setAutoPolling(false);
+            setActiveOrderId(null);
+            setStatusMessage(
+              "Pembayaran sebelumnya belum dilanjutkan. Klik tombol Bayar untuk memulai transaksi."
+            );
+          } else {
+            setStatusMessage(
+              `Order ${orderId} belum dipilih metode pembayarannya di Midtrans. Selesaikan pilihan pembayaran atau klik Bayar lagi.`
+            );
+          }
+          return;
+        }
+
+        // Still pending
+        setStatusMessage(
+          `Menunggu pembayaran untuk order ${orderId} (${data.transactionStatus}). Status diperiksa otomatis setiap 5 detik.`
+        );
+      } catch (err) {
+        if (!options?.silent) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Terjadi kesalahan saat memverifikasi pembayaran."
+          );
+        }
+      } finally {
+        verifyInFlightRef.current = false;
+        if (!options?.silent) {
+          setVerifying(false);
+        }
+      }
+    },
+    [onSaveReceipt, onVerifiedPro]
+  );
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAutoPolling(false);
+      pollCountRef.current = 0;
+      return;
+    }
+
     setError(null);
     setStatusMessage(null);
     setRedirectUrl(null);
     setLoadingConfig(true);
+
     fetch("/api/payments/midtrans/config?check=1")
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          throw new Error("API backend belum aktif di server ini.");
+        }
+        return (await res.json()) as MidtransConfigResponse;
+      })
       .then((data: MidtransConfigResponse) => {
         setConfig(data);
+        if (data.configured && pendingOrderId) {
+          pollCountRef.current = 0;
+          setAutoPolling(true);
+          verifyOrder(pendingOrderId, { silent: true });
+        }
       })
-      .catch(() => {
-        setError("Gagal memuat konfigurasi Midtrans dari server.");
+      .catch((err) => {
+        const detail = err instanceof Error ? ` (${err.message})` : "";
+        setError(`Gagal memuat konfigurasi Midtrans dari server${detail}.`);
       })
       .finally(() => setLoadingConfig(false));
-  }, [open]);
+  }, [open, pendingOrderId, verifyOrder]);
+
+  useEffect(() => {
+    if (!open || !autoPolling || !activeOrderId || !config?.configured) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current > MAX_AUTO_POLL_ATTEMPTS) {
+        setAutoPolling(false);
+        setStatusMessage(
+          `Pemeriksaan otomatis dijeda untuk order ${activeOrderId}. Jika sudah membayar, klik Cek Status Pembayaran.`
+        );
+        return;
+      }
+      verifyOrder(activeOrderId, { silent: true });
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [open, autoPolling, activeOrderId, config?.configured, verifyOrder]);
 
   if (!open) return null;
-
-  const verifyOrder = async (orderId: string) => {
-    setVerifying(true);
-    setError(null);
-    try {
-      const res = await authorizedFetch("/api/payments/midtrans/verify", {
-        method: "POST",
-        body: JSON.stringify({ orderId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal memverifikasi transaksi Midtrans.");
-      }
-
-      if (data.verified) {
-        await onSaveReceipt(orderId, "settlement");
-        onVerifiedPro(orderId, data.aiCreditsLimit || 50);
-        setStatusMessage(
-          "Pembayaran terverifikasi. Paket Pro (50 Kuota AI) kini aktif."
-        );
-      } else {
-        setStatusMessage(
-          `Status transaksi ${orderId}: ${data.transactionStatus}. Selesaikan pembayaran lalu klik Cek Status.`
-        );
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Terjadi kesalahan saat memverifikasi pembayaran."
-      );
-    } finally {
-      setVerifying(false);
-    }
-  };
 
   const handlePayNow = async () => {
     if (!config?.configured) return;
     setPaying(true);
+    setAutoPolling(false);
+    pollCountRef.current = 0;
     setError(null);
     setStatusMessage(null);
 
@@ -201,22 +307,29 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
 
       window.snap.pay(data.token, {
         onSuccess: async () => {
+          setAutoPolling(false);
           await verifyOrder(orderId);
         },
         onPending: async () => {
+          pollCountRef.current = 0;
+          setAutoPolling(true);
           setStatusMessage(
-            `Order ${orderId} menunggu pembayaran. Setelah transfer/QRIS selesai, klik Cek Status Pembayaran.`
+            `Order ${orderId} menunggu pembayaran. Status akan otomatis diperiksa setiap 5 detik hingga lunas atau kedaluwarsa.`
           );
         },
         onError: () => {
+          setAutoPolling(false);
           setError(
-            "Pembayaran gagal atau dibatalkan di Midtrans. Anda dapat mencoba membuat transaksi baru."
+            "Pembayaran ditolak atau gagal di Midtrans. Anda dapat mencoba membuat transaksi baru."
           );
         },
         onClose: () => {
+          pollCountRef.current = 0;
+          setAutoPolling(true);
           setStatusMessage(
-            `Jendela pembayaran ditutup. Jika sudah membayar untuk order ${orderId}, klik Cek Status Pembayaran.`
+            `Memeriksa status pembayaran order ${orderId} secara otomatis...`
           );
+          verifyOrder(orderId, { silent: true });
         },
       });
     } catch (err) {
@@ -279,11 +392,15 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
           <ul className="space-y-1.5 text-xs text-slate-700 pt-1">
             <li className="flex items-center gap-2">
               <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>50× kuota analisis AI (Rebalance, Peluang, Script Niche, Strategis)</span>
+              <span>
+                50× kuota analisis AI (Rebalance, Peluang, Script Niche, Strategis)
+              </span>
             </li>
             <li className="flex items-center gap-2">
               <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>Verifikasi pembayaran otomatis melalui QRIS, Virtual Account, atau e-Wallet</span>
+              <span>
+                Persetujuan instan & verifikasi otomatis berkala via QRIS, Virtual Account, atau e-Wallet
+              </span>
             </li>
           </ul>
         </div>
@@ -346,7 +463,9 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
             {config.webhookUrl && (
               <div className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-[11px] text-slate-500">Webhook Notification URL</p>
+                  <p className="text-[11px] text-slate-500">
+                    Webhook Notification URL
+                  </p>
                   <p className="font-mono text-[11px] text-slate-700 truncate">
                     {config.webhookUrl}
                   </p>
@@ -370,6 +489,7 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
                 </button>
               </div>
             )}
+
             {(config.keyModeMismatch || config.serverKeyValid === false) && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 space-y-1">
                 <p className="font-semibold">Konfigurasi Midtrans tidak cocok</p>
@@ -401,8 +521,11 @@ export const UpgradeProModal: React.FC<UpgradeProModalProps> = ({
         )}
 
         {statusMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-            {statusMessage}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 flex items-center gap-2">
+            {autoPolling && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-emerald-700" />
+            )}
+            <span>{statusMessage}</span>
           </div>
         )}
 

@@ -36,7 +36,7 @@ import {
   updateUserSprintSweep,
   upsertUserAsset,
 } from "./services/userWorkspace";
-import { authorizedFetch } from "./services/apiClient";
+import { authorizedFetch, clearStoredQuotaToken } from "./services/apiClient";
 import { LandingView } from "./components/LandingView";
 import { Sidebar } from "./components/Sidebar";
 import { OverviewView } from "./components/OverviewView";
@@ -168,6 +168,8 @@ export default function App() {
                       latestOrder,
                       "settlement"
                     );
+                  } else if ((vData.rejected || vData.notStarted) && active) {
+                    setPendingOrderId(null);
                   }
                 }
               }
@@ -215,6 +217,7 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
+    clearStoredQuotaToken(user?.uid);
     await signOut(auth);
     setActiveTab("overview");
   };

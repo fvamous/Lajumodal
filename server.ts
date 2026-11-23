@@ -1,12 +1,14 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import app from "./api/index.ts";
+import { createApiApp } from "./api/index.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  const app = createApiApp();
   const PORT = Number(process.env.PORT) || 3000;
 
   if (process.env.NODE_ENV !== "production") {

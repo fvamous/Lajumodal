@@ -1,15 +1,9 @@
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import crypto from "crypto";
-import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getApp, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +12,11 @@ const PRO_PRICE_IDR = 49000;
 const FREE_AI_LIMIT = 5;
 const PRO_AI_LIMIT = 50;
 const EPHEMERAL_FALLBACK_SECRET = crypto.randomBytes(32).toString("hex");
+const GOOGLE_CERTS_URL =
+  "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+
+let cachedCerts: { certs: Record<string, string>; expiresAt: number } | null =
+  null;
 
 function loadFirebaseProjectId(): string {
   const envProjectId = (
@@ -50,10 +49,115 @@ function loadFirebaseProjectId(): string {
   return projectId;
 }
 
-function getFirebaseAdminApp() {
-  return getApps().length
-    ? getApp()
-    : initializeApp({ projectId: loadFirebaseProjectId() });
+async function getGooglePublicCerts(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (cachedCerts && now < cachedCerts.expiresAt) {
+    return cachedCerts.certs;
+  }
+
+  const res = await fetch(GOOGLE_CERTS_URL);
+  if (!res.ok) {
+    throw new Error(`Gagal mengambil sertifikat Google (${res.status}).`);
+  }
+
+  const cacheControl = res.headers.get("cache-control") || "";
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+  const maxAgeSec = maxAgeMatch ? Number(maxAgeMatch[1]) : 3600;
+  const certs = (await res.json()) as Record<string, string>;
+
+  cachedCerts = {
+    certs,
+    expiresAt: now + Math.max(60, maxAgeSec) * 1000,
+  };
+  return certs;
+}
+
+interface VerifiedFirebaseClaims {
+  uid: string;
+  email: string;
+  name: string;
+  email_verified: boolean;
+}
+
+async function verifyFirebaseIdToken(
+  idToken: string
+): Promise<VerifiedFirebaseClaims> {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Format JWT tidak valid.");
+  }
+  const [headerB64, payloadB64, signatureB64] = parts;
+
+  const header = JSON.parse(
+    Buffer.from(headerB64, "base64url").toString("utf8")
+  ) as { alg?: string; kid?: string };
+
+  if (header.alg !== "RS256" || !header.kid) {
+    throw new Error("Header token tidak didukung.");
+  }
+
+  let certs = await getGooglePublicCerts();
+  let certPem = certs[header.kid];
+  if (!certPem) {
+    cachedCerts = null;
+    certs = await getGooglePublicCerts();
+    certPem = certs[header.kid];
+  }
+  if (!certPem) {
+    throw new Error("Sertifikat penanda tangan token tidak ditemukan.");
+  }
+
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${headerB64}.${payloadB64}`);
+  verifier.end();
+
+  const signatureBytes = Buffer.from(signatureB64, "base64url");
+  if (!verifier.verify(certPem, signatureBytes)) {
+    throw new Error("Tanda tangan token tidak valid.");
+  }
+
+  const claims = JSON.parse(
+    Buffer.from(payloadB64, "base64url").toString("utf8")
+  ) as {
+    iss?: string;
+    aud?: string;
+    sub?: string;
+    exp?: number;
+    iat?: number;
+    auth_time?: number;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+  };
+
+  const projectId = loadFirebaseProjectId();
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  if (claims.aud !== projectId) {
+    throw new Error("Audience token tidak cocok.");
+  }
+  if (claims.iss !== `https://securetoken.google.com/${projectId}`) {
+    throw new Error("Issuer token tidak cocok.");
+  }
+  if (!claims.sub || typeof claims.sub !== "string" || claims.sub.length > 128) {
+    throw new Error("Subject token tidak valid.");
+  }
+  if (!claims.exp || claims.exp <= nowSec) {
+    throw new Error("Token sesi sudah kedaluwarsa.");
+  }
+  if (!claims.iat || claims.iat > nowSec + 300) {
+    throw new Error("Waktu penerbitan token tidak valid.");
+  }
+  if (claims.auth_time && claims.auth_time > nowSec + 300) {
+    throw new Error("Waktu autentikasi token tidak valid.");
+  }
+
+  return {
+    uid: claims.sub,
+    email: claims.email || "",
+    name: claims.name || "Pengguna LajuModal",
+    email_verified: claims.email_verified === true,
+  };
 }
 
 interface AuthenticatedRequest extends Request {
@@ -258,7 +362,7 @@ async function requireFirebaseAuth(
       return;
     }
 
-    const decoded = await getAuth(getFirebaseAdminApp()).verifyIdToken(idToken);
+    const decoded = await verifyFirebaseIdToken(idToken);
     if (!decoded.uid || decoded.email_verified !== true) {
       res.status(403).json({
         error:
@@ -268,8 +372,8 @@ async function requireFirebaseAuth(
     }
 
     req.uid = decoded.uid;
-    req.userEmail = decoded.email || "";
-    req.userName = decoded.name || "Pengguna LajuModal";
+    req.userEmail = decoded.email;
+    req.userName = decoded.name;
     next();
   } catch {
     res.status(401).json({
@@ -279,21 +383,26 @@ async function requireFirebaseAuth(
   }
 }
 
-function getAIClient(): GoogleGenAI {
+async function getAIClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
     throw new Error(
       "GEMINI_API_KEY belum dikonfigurasi di Secrets / Environment Variables. Harap atur API key terlebih dahulu."
     );
   }
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
+  const { GoogleGenAI, Type, ThinkingLevel } = await import("@google/genai");
+  return {
+    ai: new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
       },
-    },
-  });
+    }),
+    Type,
+    ThinkingLevel,
+  };
 }
 
 function formatErrorMessage(err: unknown): { status: number; message: string } {
@@ -749,7 +858,7 @@ export function createApiApp(): Express {
           return;
         }
 
-        const ai = getAIClient();
+        const { ai, Type, ThinkingLevel } = await getAIClient();
         const totalPortfolio = assets.reduce(
           (sum: number, a: { balanceIDR?: number }) =>
             sum + (Number(a.balanceIDR) || 0),
@@ -875,7 +984,7 @@ Tugas Anda:
           targetMonthlyIncomeIDR = 3000000,
         } = req.body;
 
-        const ai = getAIClient();
+        const { ai, Type, ThinkingLevel } = await getAIClient();
         const prompt = `Pengguna berusia 30 tahun di Indonesia ingin membangun fondasi finansial dalam waktu dekat dengan modal minimal.
 Profil Pengguna:
 - Modal Uang Tersedia: Rp ${Number(availableCapitalIDR).toLocaleString("id-ID")}
@@ -999,7 +1108,7 @@ Hasilkan 3 peluang usaha/layanan minim modal yang PALING REALISTIS dikerjakan da
           return;
         }
 
-        const ai = getAIClient();
+        const { ai, Type, ThinkingLevel } = await getAIClient();
         const prompt = `Pengguna ingin langsung eksekusi menghasilkan uang bermodal komputer saja untuk peluang: "${opportunityTitle}" (${categoryTag}).
 Target niche spesifik yang dipilih pengguna: "${customNiche}".
 
@@ -1080,7 +1189,7 @@ Buatkan paket penawaran siap pakai hari ini dalam bahasa Indonesia:
           return;
         }
 
-        const ai = getAIClient();
+        const { ai, ThinkingLevel } = await getAIClient();
         const contextSummary = portfolioSnapshot
           ? `Konteks Keuangan Pengguna Saat Ini:
 - Total Portofolio: Rp ${Number(portfolioSnapshot.totalBalanceIDR || 0).toLocaleString("id-ID")}
@@ -1149,5 +1258,18 @@ Pertanyaan Pengguna: ${question}`;
   return app;
 }
 
-const app = createApiApp();
-export default app;
+let cachedApp: Express | null = null;
+
+export default function handler(req: Request, res: Response) {
+  try {
+    if (!cachedApp) {
+      cachedApp = createApiApp();
+    }
+    return cachedApp(req, res);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({
+      error: `Serverless initialization failed: ${msg}`,
+    });
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "LajuModal",
+  "description": "Aplikasi manajemen investasi portofolio berbasis otomatisasi kecerdasan buatan, mesin arus kas berulang, dan akselerator peluang minim modal untuk membangun kemandirian finansial di usia 30.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,270 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'displayName', 'email', 'planTier', 'aiCreditsUsed', 'aiCreditsLimit',
+          'monthlyExpenseIDR', 'splitEmergencyPercent', 'splitFixedIncomePercent',
+          'splitEquityPercent', 'splitBusinessPercent', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'displayName', 'email', 'planTier', 'aiCreditsUsed', 'aiCreditsLimit',
+          'monthlyExpenseIDR', 'splitEmergencyPercent', 'splitFixedIncomePercent',
+          'splitEquityPercent', 'splitBusinessPercent', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.planTier is string && data.planTier == 'free'
+        && data.aiCreditsUsed is number && data.aiCreditsUsed >= 0
+        && data.aiCreditsLimit is number && data.aiCreditsLimit == 5
+        && data.aiCreditsUsed <= data.aiCreditsLimit
+        && data.monthlyExpenseIDR is number && data.monthlyExpenseIDR >= 0 && data.monthlyExpenseIDR <= 10000000000
+        && data.splitEmergencyPercent is number && data.splitEmergencyPercent >= 0 && data.splitEmergencyPercent <= 100
+        && data.splitFixedIncomePercent is number && data.splitFixedIncomePercent >= 0 && data.splitFixedIncomePercent <= 100
+        && data.splitEquityPercent is number && data.splitEquityPercent >= 0 && data.splitEquityPercent <= 100
+        && data.splitBusinessPercent is number && data.splitBusinessPercent >= 0 && data.splitBusinessPercent <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAsset(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'name', 'ticker', 'category', 'balanceIDR',
+          'targetPercent', 'annualYieldPercent', 'autoDcaMonthlyIDR', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'name', 'ticker', 'category', 'balanceIDR',
+          'targetPercent', 'annualYieldPercent', 'autoDcaMonthlyIDR', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.ticker is string && data.ticker.size() >= 1 && data.ticker.size() <= 24
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && data.balanceIDR is number && data.balanceIDR >= 0 && data.balanceIDR <= 100000000000
+        && data.targetPercent is number && data.targetPercent >= 0 && data.targetPercent <= 100
+        && data.annualYieldPercent is number && data.annualYieldPercent >= 0 && data.annualYieldPercent <= 100
+        && data.autoDcaMonthlyIDR is number && data.autoDcaMonthlyIDR >= 0 && data.autoDcaMonthlyIDR <= 10000000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSprint(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'categoryTag', 'modelType', 'requiredCapitalIDR',
+          'daysToFirstCash', 'projectedMonthlyRecurringIDR', 'autoSweepPercent',
+          'whereToFindBuyers', 'sampleOfferScript', 'whyItWorks',
+          'step1Text', 'step1Done', 'step2Text', 'step2Done', 'step3Text', 'step3Done',
+          'sweptToPortfolio', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'title', 'categoryTag', 'modelType', 'requiredCapitalIDR',
+          'daysToFirstCash', 'projectedMonthlyRecurringIDR', 'autoSweepPercent',
+          'whereToFindBuyers', 'sampleOfferScript', 'whyItWorks',
+          'step1Text', 'step1Done', 'step2Text', 'step2Done', 'step3Text', 'step3Done',
+          'sweptToPortfolio', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.categoryTag is string && data.categoryTag in ['Jasa Komputer', 'Produk Digital']
+        && data.modelType is string && data.modelType.size() >= 1 && data.modelType.size() <= 100
+        && data.requiredCapitalIDR is number && data.requiredCapitalIDR >= 0 && data.requiredCapitalIDR <= 1000000000
+        && data.daysToFirstCash is number && data.daysToFirstCash >= 1 && data.daysToFirstCash <= 365
+        && data.projectedMonthlyRecurringIDR is number && data.projectedMonthlyRecurringIDR >= 0 && data.projectedMonthlyRecurringIDR <= 1000000000
+        && data.autoSweepPercent is number && data.autoSweepPercent >= 0 && data.autoSweepPercent <= 100
+        && data.whereToFindBuyers is string && data.whereToFindBuyers.size() >= 1 && data.whereToFindBuyers.size() <= 500
+        && data.sampleOfferScript is string && data.sampleOfferScript.size() >= 1 && data.sampleOfferScript.size() <= 1000
+        && data.whyItWorks is string && data.whyItWorks.size() >= 1 && data.whyItWorks.size() <= 1000
+        && data.step1Text is string && data.step1Text.size() <= 400
+        && data.step1Done is bool
+        && data.step2Text is string && data.step2Text.size() <= 400
+        && data.step2Done is bool
+        && data.step3Text is string && data.step3Text.size() <= 400
+        && data.step3Done is bool
+        && data.sweptToPortfolio is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRule(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'trigger', 'actionSummary', 'enabled',
+          'allocationPercent', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'title', 'trigger', 'actionSummary', 'enabled',
+          'allocationPercent', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.trigger is string && data.trigger.size() >= 1 && data.trigger.size() <= 200
+        && data.actionSummary is string && data.actionSummary.size() >= 1 && data.actionSummary.size() <= 400
+        && data.enabled is bool
+        && data.allocationPercent is number && data.allocationPercent >= 0 && data.allocationPercent <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentReceipt(data, userId, orderId) {
+      return data.keys().hasAll([
+          'ownerId', 'orderId', 'amountIDR', 'planTier', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'orderId', 'amountIDR', 'planTier', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.orderId is string && data.orderId == orderId && data.orderId.size() >= 4 && data.orderId.size() <= 80 && isValidId(data.orderId)
+        && data.amountIDR is number && data.amountIDR >= 49000 && data.amountIDR <= 10000000
+        && data.planTier is string && data.planTier == 'pro'
+        && data.status is string && data.status in ['pending', 'settlement', 'capture']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId}/private/{profileDocId} {
+      allow get: if isValidId(userId) && profileDocId == 'profile' && isOwner(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isValidId(userId) && profileDocId == 'profile'
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().planTier == 'free'
+        && incoming().aiCreditsUsed == 0
+        && incoming().aiCreditsLimit == 5
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && profileDocId == 'profile'
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().planTier == existing().planTier
+        && incoming().aiCreditsLimit == existing().aiCreditsLimit
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'monthlyExpenseIDR', 'splitEmergencyPercent', 'splitFixedIncomePercent',
+            'splitEquityPercent', 'splitBusinessPercent', 'updatedAt'
+          ]))
+          || (
+            incoming().aiCreditsUsed == existing().aiCreditsUsed + 1
+            && incoming().aiCreditsUsed <= existing().aiCreditsLimit
+            && incoming().diff(existing()).affectedKeys().hasOnly(['aiCreditsUsed', 'updatedAt'])
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /users/{userId}/assets/{assetId} {
+      allow get: if isValidId(userId) && isValidId(assetId) && isOwner(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isValidId(userId) && isValidId(assetId)
+        && isOwner(userId)
+        && isValidAsset(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && isValidId(assetId)
+        && isOwner(userId)
+        && isValidAsset(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'ticker', 'category', 'balanceIDR',
+          'targetPercent', 'annualYieldPercent', 'autoDcaMonthlyIDR', 'updatedAt'
+        ]);
+      allow delete: if isValidId(userId) && isValidId(assetId) && isOwner(userId);
+    }
+
+    match /users/{userId}/sprints/{sprintId} {
+      allow get: if isValidId(userId) && isValidId(sprintId) && isOwner(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isValidId(userId) && isValidId(sprintId)
+        && isOwner(userId)
+        && isValidSprint(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && isValidId(sprintId)
+        && isOwner(userId)
+        && isValidSprint(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'step1Done', 'step2Done', 'step3Done', 'updatedAt'
+          ])
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'sweptToPortfolio', 'updatedAt'
+          ])
+        );
+      allow delete: if isValidId(userId) && isValidId(sprintId) && isOwner(userId);
+    }
+
+    match /users/{userId}/rules/{ruleId} {
+      allow get: if isValidId(userId) && isValidId(ruleId) && isOwner(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isValidId(userId) && isValidId(ruleId)
+        && isOwner(userId)
+        && isValidRule(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && isValidId(ruleId)
+        && isOwner(userId)
+        && isValidRule(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['enabled', 'allocationPercent', 'updatedAt']);
+      allow delete: if isValidId(userId) && isValidId(ruleId) && isOwner(userId);
+    }
+
+    match /users/{userId}/payments/{orderId} {
+      allow get: if isValidId(userId) && isValidId(orderId) && isOwner(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isValidId(userId) && isValidId(orderId)
+        && isOwner(userId)
+        && isValidPaymentReceipt(incoming(), userId, orderId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && isValidId(orderId)
+        && isOwner(userId)
+        && isValidPaymentReceipt(incoming(), userId, orderId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().orderId == existing().orderId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if false;
+    }
+  }
+}

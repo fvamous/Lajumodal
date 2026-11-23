@@ -1,0 +1,364 @@
+{
+  "entities": {
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Private profile, subscription tier, AI quota counter, and household cashflow settings owned by a single user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "planTier": {
+          "type": "string",
+          "enum": ["free", "pro"]
+        },
+        "aiCreditsUsed": {
+          "type": "number"
+        },
+        "aiCreditsLimit": {
+          "type": "number"
+        },
+        "monthlyExpenseIDR": {
+          "type": "number"
+        },
+        "splitEmergencyPercent": {
+          "type": "number"
+        },
+        "splitFixedIncomePercent": {
+          "type": "number"
+        },
+        "splitEquityPercent": {
+          "type": "number"
+        },
+        "splitBusinessPercent": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "displayName",
+        "email",
+        "planTier",
+        "aiCreditsUsed",
+        "aiCreditsLimit",
+        "monthlyExpenseIDR",
+        "splitEmergencyPercent",
+        "splitFixedIncomePercent",
+        "splitEquityPercent",
+        "splitBusinessPercent",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PortfolioAssetDoc": {
+      "title": "PortfolioAssetDoc",
+      "description": "Individual investment or cash reserve position inside a user's portfolio.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "ticker": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "balanceIDR": {
+          "type": "number"
+        },
+        "targetPercent": {
+          "type": "number"
+        },
+        "annualYieldPercent": {
+          "type": "number"
+        },
+        "autoDcaMonthlyIDR": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "name",
+        "ticker",
+        "category",
+        "balanceIDR",
+        "targetPercent",
+        "annualYieldPercent",
+        "autoDcaMonthlyIDR",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ActiveSprintDoc": {
+      "title": "ActiveSprintDoc",
+      "description": "Active 30-day execution sprint for a low-capital service or digital product owned by a user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "categoryTag": {
+          "type": "string",
+          "enum": ["Jasa Komputer", "Produk Digital"]
+        },
+        "modelType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "requiredCapitalIDR": {
+          "type": "number"
+        },
+        "daysToFirstCash": {
+          "type": "number"
+        },
+        "projectedMonthlyRecurringIDR": {
+          "type": "number"
+        },
+        "autoSweepPercent": {
+          "type": "number"
+        },
+        "whereToFindBuyers": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "sampleOfferScript": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "whyItWorks": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "step1Text": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "step1Done": {
+          "type": "boolean"
+        },
+        "step2Text": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "step2Done": {
+          "type": "boolean"
+        },
+        "step3Text": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "step3Done": {
+          "type": "boolean"
+        },
+        "sweptToPortfolio": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "categoryTag",
+        "modelType",
+        "requiredCapitalIDR",
+        "daysToFirstCash",
+        "projectedMonthlyRecurringIDR",
+        "autoSweepPercent",
+        "whereToFindBuyers",
+        "sampleOfferScript",
+        "whyItWorks",
+        "step1Text",
+        "step1Done",
+        "step2Text",
+        "step2Done",
+        "step3Text",
+        "step3Done",
+        "sweptToPortfolio",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AutomationRuleDoc": {
+      "title": "AutomationRuleDoc",
+      "description": "User-configured cash sweep or rebalancing automation rule.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "trigger": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "actionSummary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "allocationPercent": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "trigger",
+        "actionSummary",
+        "enabled",
+        "allocationPercent",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPaymentReceiptDoc": {
+      "title": "UserPaymentReceiptDoc",
+      "description": "Midtrans order reference stored by the user for server-side verification across sessions.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 80,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "amountIDR": {
+          "type": "number"
+        },
+        "planTier": {
+          "type": "string",
+          "enum": ["pro"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "settlement", "capture"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "orderId",
+        "amountIDR",
+        "planTier",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/private/{profileDocId}": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Stores isolated private user profile, subscription tier, AI quota counters, and cashflow split settings (profileDocId == 'profile')."
+    },
+    "/users/{userId}/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/PortfolioAssetDoc" },
+      "description": "Stores individual portfolio assets owned by the user."
+    },
+    "/users/{userId}/sprints/{sprintId}": {
+      "schema": { "$ref": "#/entities/ActiveSprintDoc" },
+      "description": "Stores active 30-day low-capital execution sprints owned by the user."
+    },
+    "/users/{userId}/rules/{ruleId}": {
+      "schema": { "$ref": "#/entities/AutomationRuleDoc" },
+      "description": "Stores automation triggers and cash sweep rules owned by the user."
+    },
+    "/users/{userId}/payments/{orderId}": {
+      "schema": { "$ref": "#/entities/UserPaymentReceiptDoc" },
+      "description": "Stores Midtrans payment order references owned by the user; verified against Midtrans Status API on the backend before unlocking Pro features."
+    }
+  }
+}

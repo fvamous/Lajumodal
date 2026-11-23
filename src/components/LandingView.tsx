@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, Lock } from "lucide-react";
 import { formatCompactIDR, formatIDR } from "../data/initialState";
 
 interface LandingViewProps {
@@ -132,16 +132,22 @@ export const LandingView: React.FC<LandingViewProps> = ({
             </div>
           </div>
 
-          {/* Interactive Value Preview */}
+          {/* Interactive Value Preview (Locked until Login) */}
           <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 space-y-5">
-            <div className="pb-4 border-b border-slate-100">
-              <p className="text-xs text-slate-500">Simulasi Cepat Model Uang</p>
-              <h2 className="font-display text-base font-semibold text-slate-900 mt-0.5">
-                Dampak Arus Kas Digital selama 10 Tahun
-              </h2>
+            <div className="pb-4 border-b border-slate-100 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-slate-500">Pratinjau Model Uang</p>
+                <h2 className="font-display text-base font-semibold text-slate-900 mt-0.5">
+                  Dampak Arus Kas Digital selama 10 Tahun
+                </h2>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 shrink-0">
+                <Lock className="h-3.5 w-3.5" />
+                <span>Perlu Login</span>
+              </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 opacity-60 select-none">
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-slate-600">Setoran Rutin dari Jasa / Produk Digital</span>
@@ -155,8 +161,10 @@ export const LandingView: React.FC<LandingViewProps> = ({
                   max={10000000}
                   step={250000}
                   value={monthlyExtra}
+                  disabled
+                  aria-disabled="true"
                   onChange={(e) => setMonthlyExtra(Number(e.target.value))}
-                  className="w-full accent-slate-900 cursor-pointer"
+                  className="w-full accent-slate-400 cursor-not-allowed"
                 />
               </div>
 
@@ -173,11 +181,18 @@ export const LandingView: React.FC<LandingViewProps> = ({
                   max={16}
                   step={1}
                   value={annualReturn}
+                  disabled
+                  aria-disabled="true"
                   onChange={(e) => setAnnualReturn(Number(e.target.value))}
-                  className="w-full accent-slate-900 cursor-pointer"
+                  className="w-full accent-slate-400 cursor-not-allowed"
                 />
               </div>
             </div>
+
+            <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span>Masuk dengan Google untuk mengaktifkan simulasi dan seluruh fasilitas dashboard.</span>
+            </p>
 
             <div className="pt-4 border-t border-slate-100 space-y-2.5">
               <div className="flex items-baseline justify-between">
@@ -345,11 +360,13 @@ export const LandingView: React.FC<LandingViewProps> = ({
 
                 <button
                   type="button"
-                  onClick={onSignIn}
-                  disabled={authLoading}
-                  className="w-full px-4 py-2.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
+                  disabled
+                  aria-disabled="true"
+                  title="Silakan masuk dengan Google terlebih dahulu untuk mengakses Upgrade Paket Pro"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed"
                 >
-                  Mulai &amp; Uji Paket Pro
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Upgrade Paket Pro (Login Terlebih Dahulu)</span>
                 </button>
               </div>
             </div>

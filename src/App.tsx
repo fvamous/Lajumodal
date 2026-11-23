@@ -109,6 +109,9 @@ export default function App() {
       setProfile(null);
       setServerQuota(null);
       setPendingOrderId(null);
+      setModalOpen(false);
+      setUpgradeModalOpen(false);
+      setEditingAsset(null);
       setAssets(INITIAL_ASSETS);
       setRules(INITIAL_RULES);
       setActiveSprints([]);
@@ -218,6 +221,9 @@ export default function App() {
 
   const handleSignOut = async () => {
     clearStoredQuotaToken(user?.uid);
+    setModalOpen(false);
+    setUpgradeModalOpen(false);
+    setEditingAsset(null);
     await signOut(auth);
     setActiveTab("overview");
   };
@@ -383,13 +389,19 @@ export default function App() {
     <div className="min-h-screen flex bg-slate-50 text-slate-900">
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={(tab) => {
+          if (!user) return;
+          setActiveTab(tab);
+        }}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
         activeSprintCount={activeSprints.length}
         profile={effectiveProfile}
         userPhotoUrl={user.photoURL}
-        onUpgradePro={() => setUpgradeModalOpen(true)}
+        onUpgradePro={() => {
+          if (!user) return;
+          setUpgradeModalOpen(true);
+        }}
         onSignOut={handleSignOut}
       />
 
@@ -419,6 +431,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
+                if (!user) return;
                 setEditingAsset(null);
                 setModalOpen(true);
               }}
